@@ -34,6 +34,38 @@ stop_zapret2_if_present() {
     fi
 }
 
+zeroblock_running() {
+    ubus call zeroblock system_info >/dev/null 2>&1
+}
+
+ensure_zeroblock_running() {
+    if zeroblock_running; then
+        log "ZeroBlock daemon is already running"
+        return 0
+    fi
+
+    if [ ! -x /etc/init.d/zeroblock ]; then
+        log "Warning: /etc/init.d/zeroblock not found, cannot start ZeroBlock daemon"
+        return 1
+    fi
+
+    log "ZeroBlock daemon is not running, starting service..."
+    /etc/init.d/zeroblock start 2>/dev/null || true
+
+    local i=0
+    while [ "$i" -lt 10 ]; do
+        if zeroblock_running; then
+            log "ZeroBlock daemon started successfully"
+            return 0
+        fi
+        sleep 1
+        i=$((i + 1))
+    done
+
+    log "Warning: ZeroBlock daemon did not register ubus service after start"
+    return 1
+}
+
 ensure_zapret2_running() {
     if zapret2_running; then
         log "nfqws2 is already running"
@@ -170,6 +202,10 @@ clear_missing_auto_template_suppressions() {
 # --- Configure (Routerich only) ---
 configure_routerich() {
     log "Configuring auto-install flags..."
+    if ! ensure_zeroblock_running; then
+        log "Warning: ZeroBlock daemon is unavailable, cannot trigger auto-install reload"
+        return 1
+    fi
     uci -q set zeroblock.auto_config=auto_config
     uci -q set zeroblock.auto_config.awg_auto_config='1'
     uci -q set zeroblock.auto_config.opera_auto_config='1'
@@ -338,6 +374,7 @@ main() {
     install_zapret2
     ensure_zapret2_running || log "Continuing without running zapret2..."
     install_zeroblock
+    ensure_zeroblock_running || log "Continuing without running zeroblock..."
 
     if [ "$IS_ROUTERICH" = 1 ]; then
         if ensure_zapret2_running; then
