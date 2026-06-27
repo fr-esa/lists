@@ -176,8 +176,11 @@ configure_routerich() {
     clear_missing_auto_template_suppressions
     uci commit zeroblock
 
-    log "Triggering reload..."
-    /etc/init.d/zeroblock reload
+    log "Triggering auto-install reload..."
+    if ! ubus call zeroblock reload '{"scope":"auto_install"}' >/dev/null 2>&1; then
+        log "Warning: ubus auto_install reload failed, falling back to init.d reload"
+        /etc/init.d/zeroblock reload
+    fi
 }
 
 # --- YouTube DPI check: first OK stops, only FAIL continues ---
